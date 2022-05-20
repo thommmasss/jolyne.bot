@@ -1,4 +1,4 @@
-#python main.py
+# python main.py
 import time
 import telebot
 import random
@@ -8,13 +8,13 @@ from notifiers import get_notifier
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from time import sleep
-from telebot import types
+from telebot import types, apihelper
 import sqlite3
 import config
 
 bot = telebot.TeleBot(config.TOKEN)
 driver = webdriver.Edge()
-telegram=get_notifier('telegram')
+telegram = get_notifier('telegram')
 
 
 def bot_online():
@@ -31,10 +31,10 @@ def bot_online():
             all_results += i
         connect.commit()
         for i in range(0, len(all_results)):
-            telegram.notify(token=config.TOKEN, chat_id=all_results[i], message="Бот запущен!")
+            telegram.notify(token=config.TOKEN, chat_id=all_results[i], message="Доброе утро😇")
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 bot_online()
@@ -64,10 +64,22 @@ def db_chats(message):
         cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
         if cursor.fetchone() is None:
             cursor.execute("INSERT INTO chats VALUES(?)", [chat_id])
-            connect.commit()
+        connect.commit()
+        cursor.execute(f"""CREATE TABLE IF NOT EXISTS '{chat_id}' (
+            id INTEGER,
+            username TEXT
+        )""")
+        user_id = message.from_user.id
+        user_username = '@' + message.from_user.username
+        cursor.execute(f"SELECT id FROM '{chat_id}' WHERE id = '{user_id}'")
+        if cursor.fetchone() is None:
+            cursor.execute(f"INSERT INTO '{chat_id}' VALUES(?, ?)", (user_id, user_username))
+        else:
+            cursor.execute(f"UPDATE '{chat_id}' SET username = '{user_username}' WHERE id = '{user_id}'")
+        connect.commit()
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def db_profile(message):
@@ -96,20 +108,27 @@ def db_profile(message):
         cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
         if cursor.fetchone() is None:
             cursor.execute(f"INSERT INTO users VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (user_id, user_username, \
-                            'не указано', 'не указано', 'не указано', 'не указано', 'не указано', 'не указано',
-                            'не указано', 'не указано', \
-                            'не указано', 'не указано', 'не указано', 'не указано'))
-            connect.commit()
+                           (user_id, user_username, 'не указано', 'не указано', 'не указано', 'не указано', 'не указано\
+', 'не указано', 'не указано', 'не указано', 'не указано', 'не указано', 'не указано', 'не указано'))
+        else:
+            cursor.execute(f"UPDATE users SET username = '{user_username}' WHERE id = '{user_id}'")
+        connect.commit()
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def info_profile(message):
     try:
+        db_chats(message)
+        db_profile(message)
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
+    try:
         connect = sqlite3.connect('bot.db')
         cursor = connect.cursor()
+        last_name = lambda x: x if str(x) != 'None' else ''
         if '@' in message.text:
             user_username = message.text
             cursor.execute(f"SELECT * FROM users WHERE username = '{user_username}'")
@@ -122,57 +141,60 @@ def info_profile(message):
                 for i in cursor.execute(f"SELECT * FROM users WHERE username = '{user_username}'"):
                     all_results += i
                 connect.commit()
-                bot.send_message(message.chat.id, f"Профиль пользователя '{all_results[1]} 👮\
+                bot.send_message(message.chat.id, f"Профиль пользователя {all_results[1]} 👮\
 \n \
-\n<b>О себе:</b> '{all_results[2]}'\
+\n<b>О себе:</b> {all_results[2]}\
 \n \
-\n<b>Steam:</b> '{all_results[3]}'\
+\n<b>Steam:</b> {all_results[3]}\
 \n \
-\n<b>Discord:</b> '{all_results[4]}'\
+\n<b>Discord:</b> {all_results[4]}\
 \n \
-\n<b>VK:</b> '{all_results[5]}'\
+\n<b>VK:</b> {all_results[5]}\
 \n \
-\n<b>Ютуб:</b> '{all_results[6]}'\
+\n<b>Ютуб:</b> {all_results[6]}\
 \n \
-\n<b>Twitch:</b> '{all_results[7]}'\
+\n<b>Twitch:</b> {all_results[7]}\
 \n \
-\n<b>ТикТок:</b> '{all_results[13]}'\
+\n<b>ТикТок:</b> {all_results[13]}\
 \n \
-\n<b>Twitter:</b> '{all_results[8]}'", disable_web_page_preview=1, parse_mode='html')
+\n<b>Twitter:</b> {all_results[8]}", disable_web_page_preview=1, parse_mode='html')
+
         elif message.text.lower() == 'я':
             user_username = '@' + message.from_user.username
             cursor.execute(f"SELECT * FROM users WHERE username = '{user_username}'")
             connect.commit()
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, 'Тебя даже в базе нет, умник')
+                bot.send_message(message.chat.id, 'Тебя даже в базе нет. Но это поправимо...')
                 db_profile(message)
             else:
                 all_results = []
                 for i in cursor.execute(f"SELECT * FROM users WHERE username = '{user_username}'"):
                     all_results += i
                 connect.commit()
-                bot.send_message(message.chat.id, f"Твой профиль 👮\
+                bot.send_message(message.chat.id, f"Твой профиль, <b>{message.from_user.first_name} \
+{last_name(message.from_user.last_name)}</b> 👮\
 \n \
-\n<b>О себе:</b> '{all_results[2]}'\
+\n<b>О себе:</b> {all_results[2]}\
 \n \
-\n<b>Steam:</b> '{all_results[3]}'\
+\n<b>Steam:</b> {all_results[3]}\
 \n \
-\n<b>Discord:</b> '{all_results[4]}'\
+\n<b>Discord:</b> {all_results[4]}\
 \n \
-\n<b>VK:</b> '{all_results[5]}'\
+\n<b>VK:</b> {all_results[5]}\
 \n \
-\n<b>Ютуб:</b> '{all_results[6]}'\
+\n<b>Ютуб:</b> {all_results[6]}\
 \n \
-\n<b>Twitch:</b> '{all_results[7]}'\
+\n<b>Twitch:</b> {all_results[7]}\
 \n \
-\n<b>ТикТок:</b> '{all_results[13]}'\
+\n<b>ТикТок:</b> {all_results[13]}\
 \n \
-\n<b>Twitter:</b> '{all_results[8]}'", disable_web_page_preview=1, parse_mode='html')
+\n<b>Twitter:</b> {all_results[8]}", disable_web_page_preview=1, parse_mode='html')
+
         else:
             bot.send_message(message.chat.id, 'Нормально введи что сказано, додик')
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def about_profile(message):
@@ -193,7 +215,7 @@ def about_profile(message):
 себе или другом юзере в соответвующем пункте меню', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def steam_profile(message):
@@ -204,20 +226,20 @@ def steam_profile(message):
             user_id = message.from_user.id
             cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в базу \
-    и попробуйте еще раз", reply_markup=first())
+                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в \
+базу и попробуйте еще раз", reply_markup=first())
                 db_profile(message)
             else:
                 steam = message.text
                 cursor.execute(f"UPDATE users SET Steam = '{steam}' WHERE id = '{user_id}'")
                 connect.commit()
                 bot.send_message(message.chat.id, 'Готово! Теперь вы можете посмотреть информацию о \
-    себе или другом юзере в соответвующем пункте меню', reply_markup=first())
+себе или другом юзере в соответвующем пункте меню', reply_markup=first())
         else:
             bot.send_message(message.chat.id, 'Ты даун, даже ссылку вставить не можешь', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def vk_profile(message):
@@ -228,8 +250,8 @@ def vk_profile(message):
             user_id = message.from_user.id
             cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в базу \
-и попробуйте еще раз", reply_markup=first())
+                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в \
+базу и попробуйте еще раз", reply_markup=first())
                 db_profile(message)
             else:
                 vk = message.text
@@ -241,7 +263,7 @@ def vk_profile(message):
             bot.send_message(message.chat.id, 'Ты даун, даже ссылку вставить не можешь', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def discord_profile(message):
@@ -252,8 +274,8 @@ def discord_profile(message):
             user_id = message.from_user.id
             cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в базу \
-и попробуйте еще раз", reply_markup=first())
+                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в \
+базу и попробуйте еще раз", reply_markup=first())
                 db_profile(message)
             else:
                 discord = message.text
@@ -265,19 +287,19 @@ def discord_profile(message):
             bot.send_message(message.chat.id, 'Вы забыли указать тег', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def youtube_profile(message):
     try:
-        if 'youtube.com/channel/' in message.text:
+        if 'youtube.com/' in message.text:
             connect = sqlite3.connect('bot.db')
             cursor = connect.cursor()
             user_id = message.from_user.id
             cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в базу \
-и попробуйте еще раз", reply_markup=first())
+                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в \
+базу и попробуйте еще раз", reply_markup=first())
                 db_profile(message)
             else:
                 cursor.execute(f"UPDATE users SET YouTube = '{message.text}' WHERE id = '{user_id}'")
@@ -288,7 +310,7 @@ def youtube_profile(message):
             bot.send_message(message.chat.id, 'Ты даун, даже ссылку вставить не можешь', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def twitch_profile(message):
@@ -299,8 +321,8 @@ def twitch_profile(message):
             user_id = message.from_user.id
             cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в базу \
-и попробуйте еще раз", reply_markup=first())
+                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в \
+базу и попробуйте еще раз", reply_markup=first())
                 db_profile(message)
             else:
                 cursor.execute(f"UPDATE users SET Twitch = '{message.text}' WHERE id = '{user_id}'")
@@ -311,7 +333,7 @@ def twitch_profile(message):
             bot.send_message(message.chat.id, 'Ты даун, даже ссылку вставить не можешь', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def twitter_profile(message):
@@ -322,8 +344,8 @@ def twitter_profile(message):
             user_id = message.from_user.id
             cursor.execute(f"SELECT id FROM users WHERE id = '{user_id}'")
             if cursor.fetchone() is None:
-                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в базу \
-и попробуйте еще раз", reply_markup=first())
+                bot.send_message(message.chat.id, f"{message.from_user.first_name},вы не зареганы. Ща я вас внесу в \
+базу и попробуйте еще раз", reply_markup=first())
                 db_profile(message)
             else:
                 cursor.execute(f"UPDATE users SET Twitter = '{message.text}' WHERE id = '{user_id}'")
@@ -334,7 +356,7 @@ def twitter_profile(message):
             bot.send_message(message.chat.id, 'Ты даун, даже ссылку вставить не можешь', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def tic_tok_profile(message):
@@ -353,70 +375,110 @@ def tic_tok_profile(message):
             bot.send_message(message.chat.id, 'Готово! Больше сюда не пиши', reply_markup=first())
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def dollar_alerts(message):
     try:
-        connect = sqlite3.connect('bot.db')
-        cursor = connect.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER 
-        )""")
-        connect.commit()
         chat_id = message.chat.id
-        cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
-        if cursor.fetchone() is None:
-            cursor.execute("INSERT INTO chats VALUES(?)", [chat_id])
+        if any(map(str.isdigit, message.text)):
+            connect = sqlite3.connect('bot.db')
+            cursor = connect.cursor()
+            cursor.execute("""CREATE TABLE IF NOT EXISTS chats (
+                id INTEGER 
+            )""")
             connect.commit()
-        cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
+            cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
+            if cursor.fetchone() is None:
+                cursor.execute("INSERT INTO chats VALUES(?)", [chat_id])
+                connect.commit()
+            cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
 
-        while True:
-            resp_dollar = requests.get('https://coinmarketcap.com/ru/currencies/tether/').text
-            soup = BeautifulSoup(resp_dollar, 'lxml')
-            title_dollar = soup.find('div', {'class': 'priceValue'}).find('span')
-            resp_euro = requests.get('https://coinmarketcap.com/ru/currencies/tether-eurt/').text
-            soup = BeautifulSoup(resp_euro, 'lxml')
-            title_euro = soup.find('div', {'class': 'priceValue'}).find('span')
-            telegram.notify(token=config.TOKEN, chat_id=chat_id, message=f'💵 = {title_dollar.get_text()} \
+            alert_time = int(''.join(filter(str.isdigit, message.text)))
+            while True:
+                resp_dollar = requests.get('https://coinmarketcap.com/ru/currencies/tether/').text
+                soup = BeautifulSoup(resp_dollar, 'lxml')
+                title_dollar = soup.find('div', {'class': 'priceValue'}).find('span')
+                resp_euro = requests.get('https://coinmarketcap.com/ru/currencies/tether-eurt/').text
+                soup = BeautifulSoup(resp_euro, 'lxml')
+                title_euro = soup.find('div', {'class': 'priceValue'}).find('span')
+                telegram.notify(token=config.TOKEN, chat_id=chat_id, message=f'💵 = {title_dollar.get_text()} \
 \n💶 = {title_euro.get_text()}')
-            sleep(60*10)
+                sleep(60*alert_time)
+        else:
+            telegram.notify(token=config.TOKEN, chat_id=chat_id, message='Чел, цифрами число пиши')
     except Exception as e:
         print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 def btc_alerts(message):
     try:
-        connect = sqlite3.connect('bot.db')
-        cursor = connect.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER 
-        )""")
-        connect.commit()
         chat_id = message.chat.id
-        cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
-        if cursor.fetchone() is None:
-            cursor.execute("INSERT INTO chats VALUES(?)", [chat_id])
+        if any(map(str.isdigit, message.text)):
+            connect = sqlite3.connect('bot.db')
+            cursor = connect.cursor()
+            cursor.execute("""CREATE TABLE IF NOT EXISTS chats (
+                id INTEGER
+                dollar_alerts INTEGER
+                btc_alerts INTEGER 
+            )""")
             connect.commit()
+            cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
+            if cursor.fetchone() is None:
+                cursor.execute("INSERT INTO chats VALUES(?, ?, ?)", [chat_id])
+                connect.commit()
 
-        cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
+            cursor.execute(f"SELECT id FROM chats WHERE id = '{chat_id}'")
 
-        while True:
-            resp_dollar = requests.get('https://coinmarketcap.com/ru/currencies/bitcoin/').text
-            soup = BeautifulSoup(resp_dollar, 'lxml')
-            title_dollar = soup.find('div', {'class': 'priceValue'}).find('span')
-            resp_euro = requests.get('https://coinmarketcap.com/ru/currencies/ethereum/').text
-            soup = BeautifulSoup(resp_euro, 'lxml')
-            title_euro = soup.find('div', {'class': 'priceValue'}).find('span')
-            telegram.notify(token=config.TOKEN, chat_id=chat_id, message=f'BTC = {title_dollar.get_text()} \
-\nETH = {title_euro.get_text()}')
-            sleep(60*5)
+            alert_time = int(''.join(filter(str.isdigit, message.text)))
+            while True:
+                resp_btc = requests.get('https://coinmarketcap.com/currencies/bitcoin/').text
+                soup_btc = BeautifulSoup(resp_btc, 'lxml')
+                title_btc = soup_btc.find('div', {'class': 'priceValue'}).find('span')
+                resp_eth = requests.get('https://coinmarketcap.com/currencies/ethereum/').text
+                soup_eth = BeautifulSoup(resp_eth, 'lxml')
+                title_eth = soup_eth.find('div', {'class': 'priceValue'}).find('span')
+                telegram.notify(token=config.TOKEN, chat_id=chat_id, message=f'BTC = {title_btc.get_text()} \
+\nETH = {title_eth.get_text()}')
+                sleep(60*alert_time)
+        else:
+            telegram.notify(token=config.TOKEN, chat_id=chat_id, message='Чел, цифрами число пиши')
     except Exception as e:
         print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
+
+
+@bot.message_handler(commands=['all'])
+def tag_all(message):
+    try:
+        db_chats(message)
+        db_profile(message)
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
+    try:
+        connect = sqlite3.connect('bot.db')
+        cursor = connect.cursor()
+        chat_id = message.chat.id
+        all_results = []
+        for i in cursor.execute(f"SELECT username FROM '{chat_id}'"):
+            all_results += i
+        connect.commit()
+        msg = ' '.join(all_results)
+        bot.send_message(message.chat.id, msg)
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 @bot.message_handler(commands=['profile'])
 def profile(message):
+    try:
+        db_chats(message)
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
     markup = types.InlineKeyboardMarkup(row_width=4)
     item0 = types.InlineKeyboardButton('О себе', callback_data='About')
     item1 = types.InlineKeyboardButton('Steam', callback_data='Steam')
@@ -443,8 +505,14 @@ def welcome(message):
     sticker = open('jolyne.webp', 'rb')
     bot.send_sticker(message.chat.id, sticker)
     bot.send_message(message.chat.id, "Привет, {0.first_name}!\nЯ - <b>{1.first_name}</b>, искусственный интеллект \
-высокого уровня со множеством функций, большая часть из котороых не работает!".format(message.from_user, \
-bot.get_me()), parse_mode='html', reply_markup=first())
+высокого уровня со множеством функций, большая часть из котороых не работает!".format(message.from_user, bot.get_me()),
+                     parse_mode='html', reply_markup=first())
+    try:
+        db_chats(message)
+        db_profile(message)
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 @bot.message_handler(commands=['next'])  # вторая страница
@@ -461,6 +529,12 @@ def second(message):
 
     bot.send_message(message.chat.id, 'Это вторая страница разнообразной (бес)полезной лабуды', reply_markup=markup)
 
+    try:
+        db_chats(message)
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
+
 
 @bot.message_handler(commands=['weather'])  # парсинг погоды
 def weather(message):
@@ -472,7 +546,7 @@ def weather(message):
 
     markup.add(item1, item2, item3, item4)
 
-    bot.send_message(message.chat.id, 'В столице какой из величайших стран шиноби вы хотите узнать погоду?', \
+    bot.send_message(message.chat.id, 'В столице какой из величайших стран шиноби вы хотите узнать погоду?',
                      reply_markup=markup)
 
 
@@ -483,10 +557,8 @@ def alerts(message):
     item2 = types.InlineKeyboardButton('Новости', callback_data='news_alerts')
     item3 = types.InlineKeyboardButton('Курс BTC и ETH', callback_data='btc_alerts')
     item4 = types.InlineKeyboardButton('Пока хз', callback_data='else')
-
     markup.add(item1, item2, item3, item4)
-
-    bot.send_message(message.chat.id, 'Эта функция будет переодически отправлять уведомления в выбранной категории', \
+    bot.send_message(message.chat.id, 'Эта функция будет переодически отправлять уведомления в выбранной категории',
                      reply_markup=markup)
 
 
@@ -507,6 +579,8 @@ def last_news_search(message):  # последняя новость с сайт�
     except Exception as e:
         bot.send_message(message.chat.id, 'Временно не работает по причине того, что пидорасы из РосКомПозора \
 заблокировали этот сайт')
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 @bot.message_handler(commands=['time'])
@@ -540,8 +614,8 @@ def buttons(message):
     elif message.text == 'Добавить инфу 📂':
         profile(message)
     elif message.text == 'Информация о...😏':
-        msg = bot.send_message(message.chat.id, 'Скиньте юзернем (в формате @[username] ) пользователя, чтобы я вывела его \
-данные. \nИли введите "Я", если хотите вывести свой профиль')
+        msg = bot.send_message(message.chat.id, 'Скиньте юзернем (в формате @[username] ) пользователя, чтобы я вывела\
+его данные. \nИли введите "Я", если хотите вывести свой профиль')
         bot.register_next_step_handler(msg, info_profile)
     elif message.text == 'Секретная хуйня ⚙':
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -551,11 +625,13 @@ def buttons(message):
         markup.add(item1, item2, item3)
         bot.send_message(message.chat.id, 'Секретные хуйни будут пополняться, проверяйте переодически',
                          reply_markup=markup)
-    elif message.text == 'Лучшее аниме 🏆':
-        bot.send_message(message.chat.id, 'Глупо спорить о том, какое а{Н}име лучше, а к{А}кое хуже. Существует огромное количество жан{Р}ов и в каждом из них тысячи тайтлов...\
- даже я, бот, не  способен пересмотреть их все. И даже если бы пересмотрел, то создать одн{У}, объективную и верную оценку просто напросто невозможно. Ни один топ, тем более если\
- мы говорим об аниме, не может отрази{Т}ь чувства и эмоции каждого из нас. Я считаю, что вопрос просто напросто не имеет смысла. Каждый, будь он человек или бот имеет право на\
- собственные интересы, любимые и нелюбимые вещи. Любите, то что вам нравится и не устраивайте глупых срачей! У каждог{О} свои вкусы!❤')
+    elif message.text == 'Лучшее аниме':
+        bot.send_message(message.chat.id, 'Глупо спорить о том, какое а{Н}име лучше, а к{А}кое хуже. Существует огром\
+ное количество жан{Р}ов и в каждом из них тысячи тайтлов... Даже я, бот, не  способен пересмотреть их все. И даже если\
+ бы пересмотрел, то создать одн{У}, объективную и верную оценку просто напросто невозможно. Ни один топ, тем более если\
+ мы говорим об аниме, не может отрази{Т}ь чувства и эмоции каждого из нас. Я считаю, что вопрос просто напросто не име\
+ет смысла. Каждый, будь он человек или бот имеет право на собственные интересы, любимые и нелюбимые вещи. Любите, то \
+что вам нравится и не устраивайте глупых срачей! У каждог{О} свои вкусы!❤')
     elif message.text == 'Дальше ➡':
         second(message)
     elif message.text == 'Везер Репорто 🌦️':
@@ -567,7 +643,7 @@ def buttons(message):
     elif message.text == '🦧Мой юзернейм':
         bot.send_message(message.chat.id, f'Ваш username: @{message.from_user.username}')
     elif message.text == '🈴Мое имя (не аниме)':
-        if message.from_user.last_name == None:
+        if message.from_user.last_name == 'None':
             bot.send_message(message.chat.id, f'Ваш ник: {message.from_user.first_name}')
         else:
             bot.send_message(message.chat.id, f'Ваш ник: {message.from_user.first_name} {message.from_user.last_name}')
@@ -579,32 +655,46 @@ def buttons(message):
         msk_time(message)
     elif message.text == 'Назад ↩':
         bot.send_message(message.chat.id, 'Первая страница выбора функций', reply_markup=first())
+    elif ('@all' in message.text) or ('@everyone' in message.text):
+        tag_all(message)
     else:
         pass
 
 
 def youtube_search(message):  # поиск видео на ютубе
-    bot.send_message(message.chat.id, 'Начинаю поиск по вашему запросу (чел, мог бы просто на ютуб зайти)')
-    video_href = 'https://www.youtube.com/results?search_query=' + message.text
-    driver.get(video_href)
-    sleep(2)
-    videos = driver.find_elements_by_id('video-title')
-    for i in range(len(videos)):
-        bot.send_message(message.chat.id, videos[i].get_attribute('href'))
-        if i == 4:
-            break
+    try:
+        bot.send_message(message.chat.id, 'Начинаю поиск по вашему запросу (чел, мог бы просто на ютуб зайти)')
+        video_href = 'https://www.youtube.com/results?search_query=' + message.text
+        driver.get(video_href)
+        sleep(2)
+        videos = driver.find_elements_by_id('video-title')
+        for i in range(len(videos)):
+            bot.send_message(message.chat.id, videos[i].get_attribute('href'))
+            if i == 4:
+                break
+    except Exception as e:
+        print(repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     try:
         if call.message:
+            try:
+                db_chats(call.message)
+                db_profile(call.message)
+            except Exception as e:
+                print(repr(e))
+                telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
             if call.data == 'good':
                 bot.send_message(call.message.chat.id, 'Вот и отлично')
             elif call.data == 'bad':
                 bot.send_message(call.message.chat.id, 'Соболезную')
             elif call.data == 'code':
-                bot.send_message(call.message.chat.id, 'https://pastebin.com/nG04h1KZ')
+                bot.send_message(call.message.chat.id, 'PasteBin(может не работать, там какие-то фильтры ругаются \
+на ОПАСНЫЙ КОНТЕНТ (ну такой колхозный код и правда опасен): https://pastebin.com/nG04h1KZ \nGitHub(тут должно работать\
+): https://github.com/thommmasss/jolyne.bot/blob/main/main.py')
             elif call.data == 'channel':
                 bot.send_message(call.message.chat.id,
                                  'На мой субъективный двоичный взгляд, лучший канал это:\n @dramaturgT')
@@ -653,48 +743,59 @@ def callback_inline(call):
             elif call.data == 'bad' or call.data == 'good':
                 bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="На \
 самом деле мне глубочайше все равно, просто я запрограммирован спрашивать, как у тебя дела😘", reply_markup=None)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
             # база данных
             elif call.data == 'About':
-                msg = bot.send_message(call.message.chat.id, 'Пиши тут чо хочешь (главное не забудь указать \
-номер карты, пин-код, имя держателя карты (фамилия и имя на английском), срок действия и CVC-код (с обратной стороны карты)')
+                msg = bot.send_message(call.message.chat.id, 'Пиши тут чо хочешь (главное не забудь указать номер \
+карты, пин-код, имя держателя карты (фамилия и имя на английском), срок действия и CVC-код (с обратной стороны карты)')
                 bot.register_next_step_handler(msg, about_profile)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
             elif call.data == 'Steam':
                 msg = bot.send_message(call.message.chat.id, 'Скиньте ссылку на свой акк в Стиме \
 (в формате https://steamcommunity.com/id/[id профиля])', disable_web_page_preview=1)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, steam_profile)
             elif call.data == 'Discord':
                 msg = bot.send_message(call.message.chat.id, 'Напишите свой ник \
 в Дискорде (в формате [ник]#[тег])')
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, discord_profile)
             elif call.data == 'VK':
                 msg = bot.send_message(call.message.chat.id, 'Скиньте ссылку на свой акк ВКонтакте \
 (в формате vk.com/[id профиля])', disable_web_page_preview=1)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, vk_profile)
             elif call.data == 'YouTube':
                 msg = bot.send_message(call.message.chat.id, 'Скиньте ссылку на свой канал на Ютубе \
 (в формате youtube.com/channel/[id])', disable_web_page_preview=1)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, youtube_profile)
             elif call.data == 'Twitch':
                 msg = bot.send_message(call.message.chat.id, 'Скиньте ссылку на свой канал на толерантной помойке, \
 ой, Твиче (в формате twitch.tv/[id канала])', disable_web_page_preview=1)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, twitch_profile)
             elif call.data == 'Twitter':
                 msg = bot.send_message(call.message.chat.id, 'Капец, кто ты вообще такой, что сидишь в Твиторе? \
 Ну скидывай ссылочку на акк (в формате twitter.com/[id акка])', disable_web_page_preview=1)
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, twitter_profile)
             elif call.data == 'Tic_Tok':
                 msg = bot.send_message(call.message.chat.id, 'Извини, но я в душе не ебу, как в этом тиктаке \
-записываются акки. Пиши чо хочешь, но лучше не пиши)', disable_web_page_preview=1)
+записываются акки. Пиши чо хочешь, но лучше не пиши)')
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
                 bot.register_next_step_handler(msg, tic_tok_profile)
-            elif call.data == 'dollar_alerts':
-                dollar_alerts(call.message)
             elif call.data == 'btc_alerts':
-                btc_alerts(call.message)
+                msg = bot.send_message(call.message.chat.id, 'Раз в сколько минут ваз уведомлять об изменении цены?')
+                bot.register_next_step_handler(msg, btc_alerts)
+            elif call.data == 'dollar_alerts':
+                msg = bot.send_message(call.message.chat.id, 'Раз в сколько минут ваз уведомлять об изменении цены?')
+                bot.register_next_step_handler(msg, dollar_alerts)
             else:
                 bot.send_message(call.message.chat.id, 'Такой функции пока что нет, но скоро будет')
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 @atexit.register
@@ -717,7 +818,7 @@ def bot_offline():
         connect.close()
     except Exception as e:
         print(repr(e))
-        telegram.notify(token=config.TOKEN, chat_id=784334273, message=repr(e))
+        telegram.notify(token=config.TOKEN, chat_id=config.admin_id, message=repr(e))
 
 
 # RUN
